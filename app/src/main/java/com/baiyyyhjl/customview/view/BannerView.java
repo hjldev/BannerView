@@ -1,11 +1,9 @@
 package com.baiyyyhjl.customview.view;
 
 import android.content.Context;
-import android.os.Handler;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -16,9 +14,11 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import com.baiyyyhjl.customview.R;
+import com.baiyyyhjl.customview.callback.BannerItemListener;
 import com.nostra13.universalimageloader.core.ImageLoader;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,12 +31,12 @@ public class BannerView extends RelativeLayout {
     private List<String> titleList = new ArrayList<>();
     // 获取图片的url
     private List<String> urlList = new ArrayList<>();
-    // 对每个图片点击的事件监听
+    // 保存每一个点击事件listener
     private List<OnClickListener> listenerList = new ArrayList<>();
     // 视图的title
     private TextView titleTv;
     // 视图的viewpager，来滑动显示图片，需要设置adapter
-    private ViewPager vp;
+    private ViewPager viewPager;
     // 用于显示页数的小点
     private LinearLayout ll;
     // 加载图片工具
@@ -48,6 +48,10 @@ public class BannerView extends RelativeLayout {
     private boolean turning;
     private long autoTurningTime;
     private boolean canTurn = false;
+
+    private BannerItemListener listener;
+
+    private ViewPagerScroller scroller;
 
     public boolean isTurning() {
         return turning;
@@ -68,18 +72,19 @@ public class BannerView extends RelativeLayout {
     public BannerView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         init();
+        listener = (BannerItemListener) context;
     }
 
     private void init() {
         View view = LayoutInflater.from(getContext()).inflate(R.layout.view_banner, this, true);
-        vp = (ViewPager) view.findViewById(R.id.vp);
+        viewPager = (ViewPager) view.findViewById(R.id.view_pager);
         titleTv = (TextView) view.findViewById(R.id.tv_adv_title);
         ll = (LinearLayout) view.findViewById(R.id.ll_dots);
         adapter = new MyPagerAdapter();
-        vp.setAdapter(adapter);
+        viewPager.setAdapter(adapter);
 
         // 设置ViewPager的滑动监听
-        vp.setOnPageChangeListener(new ViewPager.OnPageChangeListener() {
+        viewPager.setOnPageChangeListener(new ViewPager.OnPageChangeListener() {
             @Override
             public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
 
@@ -96,8 +101,31 @@ public class BannerView extends RelativeLayout {
 
             }
         });
-        adSwitchTask = new AdSwitchTask(this);
+        initViewPagerScroll();
 
+        adSwitchTask = new AdSwitchTask(this);
+    }
+
+    /**
+     * 设置ViewPager的滑动速度
+     */
+    private void initViewPagerScroll() {
+        try {
+            Field mScroller = null;
+            mScroller = ViewPager.class.getDeclaredField("mScroller");
+            // 设置可以访问
+            mScroller.setAccessible(true);
+            scroller = new ViewPagerScroller(
+                    viewPager.getContext());
+            mScroller.set(viewPager, scroller);
+
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        } catch (IllegalArgumentException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
     }
 
     private class AdSwitchTask implements Runnable {
@@ -114,11 +142,11 @@ public class BannerView extends RelativeLayout {
             BannerView bannerView = reference.get();
             // 如果没有被回收，则进行计时操作，循环图片
             if (bannerView != null) {
-                if (bannerView.vp != null && bannerView.turning) {
-                    if (bannerView.vp.getCurrentItem() < bannerView.adapter.getCount() - 1) {
-                        bannerView.vp.setCurrentItem(bannerView.vp.getCurrentItem() + 1);
-                    } else if (bannerView.vp.getCurrentItem() == bannerView.adapter.getCount() - 1) {
-                        bannerView.vp.setCurrentItem(0);
+                if (bannerView.viewPager != null && bannerView.turning) {
+                    if (bannerView.viewPager.getCurrentItem() < bannerView.adapter.getCount() - 1) {
+                        bannerView.viewPager.setCurrentItem(bannerView.viewPager.getCurrentItem() + 1);
+                    } else if (bannerView.viewPager.getCurrentItem() == bannerView.adapter.getCount() - 1) {
+                        bannerView.viewPager.setCurrentItem(0);
                     }
                     bannerView.postDelayed(bannerView.adSwitchTask, bannerView.autoTurningTime);
                 }
@@ -181,7 +209,7 @@ public class BannerView extends RelativeLayout {
         }
 
         @Override
-        public Object instantiateItem(ViewGroup container, int position) {
+        public Object instantiateItem(ViewGroup container, final int position) {
             ImageView imageView = null;
             if (position < imageViews.size()) {
                 imageView = imageViews.get(position);
@@ -195,6 +223,12 @@ public class BannerView extends RelativeLayout {
             // 防止多次加载，加载过之后设置一个标记Tag，不再多次加载
             if (imageView.getTag() == null) {
                 imageLoader.displayImage(urlList.get(position), imageView);
+                imageView.setOnClickListener(new OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        listener.itemListener(position);
+                    }
+                });
                 imageView.setOnClickListener(listenerList.get(position));
                 imageView.setTag(position);
             }
@@ -225,7 +259,6 @@ public class BannerView extends RelativeLayout {
      *
      * @param title
      * @param url
-     * @param listener
      */
     public void addItem(String title, String url, OnClickListener listener) {
         // 设置右下角的远点，每增加一个item，就往Linearlayout里面添加一个点

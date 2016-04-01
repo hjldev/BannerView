@@ -4,7 +4,7 @@
     <android.support.v4.view.ViewPager
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:id="@+id/vp"/>
+        android:id="@+id/view_pager"/>
 
     <LinearLayout
         android:orientation="horizontal"
