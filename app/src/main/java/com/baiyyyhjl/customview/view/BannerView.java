@@ -4,6 +4,7 @@ import android.content.Context;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -82,18 +83,17 @@ public class BannerView extends RelativeLayout {
         ll = (LinearLayout) view.findViewById(R.id.ll_dots);
         adapter = new MyPagerAdapter();
         viewPager.setAdapter(adapter);
-
         // 设置ViewPager的滑动监听
         viewPager.setOnPageChangeListener(new ViewPager.OnPageChangeListener() {
             @Override
             public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
-
             }
 
             @Override
             public void onPageSelected(int position) {
-                titleTv.setText(titleList.get(position));
-                switchDots(position);
+                int pos = position % urlList.size();
+                titleTv.setText(titleList.get(pos));
+                switchDots(pos);
             }
 
             @Override
@@ -143,10 +143,16 @@ public class BannerView extends RelativeLayout {
             // 如果没有被回收，则进行计时操作，循环图片
             if (bannerView != null) {
                 if (bannerView.viewPager != null && bannerView.turning) {
-                    if (bannerView.viewPager.getCurrentItem() < bannerView.adapter.getCount() - 1) {
-                        bannerView.viewPager.setCurrentItem(bannerView.viewPager.getCurrentItem() + 1);
-                    } else if (bannerView.viewPager.getCurrentItem() == bannerView.adapter.getCount() - 1) {
-                        bannerView.viewPager.setCurrentItem(0);
+//                    if (bannerView.viewPager.getCurrentItem() < bannerView.adapter.getCount() - 1) {
+//                        bannerView.viewPager.setCurrentItem(bannerView.viewPager.getCurrentItem() + 1);
+//                    } else if (bannerView.viewPager.getCurrentItem() == bannerView.adapter.getCount() - 1) {
+//                        bannerView.viewPager.setCurrentItem(0);
+//                    }
+                    int page = bannerView.viewPager.getCurrentItem() + 1;
+                    if (page == adapter.getCount() - 1){
+                        bannerView.viewPager.setCurrentItem(urlList.size() - 1, false);
+                    } else {
+                        bannerView.viewPager.setCurrentItem(page,false);
                     }
                     bannerView.postDelayed(bannerView.adSwitchTask, bannerView.autoTurningTime);
                 }
@@ -196,11 +202,13 @@ public class BannerView extends RelativeLayout {
     private class MyPagerAdapter extends PagerAdapter {
 
         // 将定义的ImageView都保存在imageViews中，防止多次定义
-        private List<ImageView> imageViews = new ArrayList<>();
+        // 由于只是一个广告位，不会加载过多的view，所以多次定义没有问题
+//        private List<ImageView> imageViews = new ArrayList<>();
 
         @Override
         public int getCount() {
-            return urlList.size();
+            int size = urlList.size() * 2;
+            return size;
         }
 
         @Override
@@ -209,28 +217,29 @@ public class BannerView extends RelativeLayout {
         }
 
         @Override
-        public Object instantiateItem(ViewGroup container, final int position) {
+        public Object instantiateItem(ViewGroup container, int position) {
+            final int pos = position % urlList.size();
             ImageView imageView = null;
-            if (position < imageViews.size()) {
-                imageView = imageViews.get(position);
-            } else {
-                imageView = new ImageView(container.getContext());
-                imageView.setScaleType(ImageView.ScaleType.FIT_XY);
-                ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-                imageView.setLayoutParams(lp);
-                imageViews.add(imageView);
-            }
+//            if (position < imageViews.size()) {
+//                imageView = imageViews.get(position);
+//            } else {
+            imageView = new ImageView(container.getContext());
+            imageView.setScaleType(ImageView.ScaleType.FIT_XY);
+            ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            imageView.setLayoutParams(lp);
+//                imageViews.add(imageView);
+//            }
             // 防止多次加载，加载过之后设置一个标记Tag，不再多次加载
             if (imageView.getTag() == null) {
-                imageLoader.displayImage(urlList.get(position), imageView);
+                imageLoader.displayImage(urlList.get(pos), imageView);
                 imageView.setOnClickListener(new OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        listener.itemListener(position);
+                        listener.itemListener(pos);
                     }
                 });
-                imageView.setOnClickListener(listenerList.get(position));
-                imageView.setTag(position);
+                imageView.setOnClickListener(listenerList.get(pos));
+                imageView.setTag(pos);
             }
             container.addView(imageView);
             return imageView;
@@ -239,6 +248,17 @@ public class BannerView extends RelativeLayout {
         @Override
         public void destroyItem(ViewGroup container, int position, Object object) {
             container.removeView((View) object);
+        }
+
+        @Override
+        public void finishUpdate(ViewGroup container) {
+            int position = viewPager.getCurrentItem();
+            if (position == 0) {
+                position = urlList.size();
+            } else if (position == adapter.getCount() - 1) {
+                position = urlList.size() - 1;
+            }
+            viewPager.setCurrentItem(position, false);
         }
     }
 
